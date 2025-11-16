@@ -1,5 +1,14 @@
 import streamlit as st
-from commission_logic import calculate_bonus_total
+# Import logic from the new file
+from commission_logic import (
+    clear_calc,
+    input_number,
+    handle_operation,
+    calculate_result,
+    calculate_bonus_total, # Assuming you had this in a previous 'commission_logic.py'
+    add_entry,
+    remove_entry
+)
 
 # Set page config and inject custom CSS for margins
 st.set_page_config(layout="wide", page_title="Calculators App")
@@ -57,81 +66,27 @@ if 'new_input' not in st.session_state:
     st.session_state.new_input = False
 
 
-# --- Callbacks for dynamic rows (Bonus Calculator) ---
-def add_entry():
-    st.session_state.bonus_entries.append({'amount': 0.0, 'percentage': 0.0})
-
-def remove_entry(index):
-    if 0 <= index < len(st.session_state.bonus_entries):
-        st.session_state.bonus_entries.pop(index)
-
-# --- Standard Calculator Logic & Callbacks ---
-def clear_calc():
-    st.session_state.calc_display = ""
-    st.session_state.calc_history = 0
-    st.session_state.calc_operation = None
-    st.session_state.new_input = False
-
-def input_number(value):
-    if st.session_state.new_input:
-        st.session_state.calc_display = str(value)
-        st.session_state.new_input = False
-    else:
-        if st.session_state.calc_display == "0":
-            st.session_state.calc_display = str(value)
-        else:
-            st.session_state.calc_display += str(value)
-    print(st.session_state.calc_display)
-
-
-def handle_operation(operation):
-    if st.session_state.calc_display:
-        if st.session_state.calc_operation and not st.session_state.new_input:
-            calculate_result()
-        
-        st.session_state.calc_history = float(st.session_state.calc_display)
-        st.session_state.calc_operation = operation
-        st.session_state.new_input = True
-
-def calculate_result():
-    if st.session_state.calc_operation and st.session_state.calc_display:
-        num1 = st.session_state.calc_history
-        num2 = float(st.session_state.calc_display)
-        result = 0
-
-        if st.session_state.calc_operation == '+':
-            result = num1 + num2
-        elif st.session_state.calc_operation == '-':
-            result = num1 - num2
-        elif st.session_state.calc_operation == '*':
-            result = num1 * num2
-        elif st.session_state.calc_operation == '/':
-            if num2 != 0:
-                result = num1 / num2
-            else:
-                st.session_state.calc_display = "Error"
-                return
-
-        st.session_state.calc_display = str(round(result, 5))
-        st.session_state.calc_history = result
-        st.session_state.calc_operation = None
-        st.session_state.new_input = True
-
-
 def standard_calculator_ui():
     st.header("Calculator")
 
     # The display field is read-only
     display_value = st.session_state.calc_display if st.session_state.calc_display else "0"
-    st.metric("Result", round(float(display_value)))
+    # Note: st.metric handles rounding slightly differently, but this retains original behavior
+    try:
+        metric_value = round(float(display_value))
+    except ValueError:
+        metric_value = "Error"
+        
+    st.metric("Result", metric_value)
 
     # Create a 4x4 grid using columns
-    col1, col2, col3, col4 = st.columns(4) # Explicit ratio here is fine
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.button("7", on_click=input_number, args=(7,), use_container_width=True)
         st.button("4", on_click=input_number, args=(4,), use_container_width=True)
         st.button("1", on_click=input_number, args=(1,), use_container_width=True)
+        # We pass the button clicks directly to the logic functions
         st.button("C", on_click=clear_calc, use_container_width=True)
 
     with col2:
@@ -147,6 +102,7 @@ def standard_calculator_ui():
         st.button("=", on_click=calculate_result, use_container_width=True)
 
     with col4:
+        # Args are passed to the logic functions
         st.button("÷", on_click=handle_operation, args=('/'), use_container_width=True)
         st.button("×", on_click=handle_operation, args=('*'), use_container_width=True)
         st.button(r"\-", on_click=handle_operation, args=('-'), use_container_width=True)
@@ -163,23 +119,28 @@ with left_column:
         st.header("🌟 Bonus Calculator")
         st.text("Calculate total bonuses across multiple entries")
         st.markdown("---")
+        percentage_options = list(range(5, 101, 5))
 
-        # FIX: Explicitly define columns here with ratios [4, 4, 1]
         for i, entry in enumerate(st.session_state.bonus_entries):
             col1_b, col2_b, col3_b = st.columns([4, 4, 1])
             with col1_b:
-                new_amount = st.number_input(f"Amount", min_value=0.0, step=100.0, key=f"amount_{i}")
+                # The input fields update session state directly via keys
+                new_amount = st.number_input(f"Amount", min_value=0, step=20, key=f"amount_{i}")
             with col2_b:
-                new_percentage = st.number_input(f"Bonus %", min_value=0.0, max_value=100.0, key=f"percentage_{i}")
+                new_percentage = st.selectbox(f"Bonus %", options=percentage_options, key=f"percentage_{i}")            
             with col3_b:
                 st.markdown("<br>", unsafe_allow_html=True)
+                # Call logic function on click
                 st.button("🗑️", key=f"remove_{i}", on_click=remove_entry, args=(i,))
+            
+            # This ensures the session state reflects the current inputs immediately
             st.session_state.bonus_entries[i] = {'amount': new_amount, 'percentage': new_percentage}
 
-        st.button("➕ Add Metric", on_click=add_entry, use_container_width=True)
+        st.button(r"\+ Add Metric", on_click=add_entry, use_container_width=True)
         st.markdown("---")
 
         if st.session_state.bonus_entries:
+            # Call the bonus calculation logic function
             total_bonus = calculate_bonus_total(st.session_state.bonus_entries)
             st.metric("Total Calculated Bonus", f"${total_bonus:,.2f}")
         else:
